@@ -16,7 +16,7 @@ import torch.optim as optim
 from time import time
 from lib.model.EncDecModel import EncDec
 from lib.model.UNetModel import UNet
-from lib.dataset.PhCDataset import PhC
+from IDLCV_03.lib.dataset.dataset import PhC
 
 # Dataset
 size = 128
