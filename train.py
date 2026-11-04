@@ -16,8 +16,10 @@ import torch.optim as optim
 from time import time
 from lib.model.EncDecModel import EncDec
 from lib.model.UNetModel import UNet
-from IDLCV_03.lib.dataset.dataset import PhC
+from IDLCV_03.lib.dataset.dataset import DRIVE, PH2
+from sklearn.model_selection import train_test_split
 
+seed = 42
 # Dataset
 size = 128
 train_transform = transforms.Compose([transforms.Resize((size, size)),
@@ -26,16 +28,33 @@ test_transform = transforms.Compose([transforms.Resize((size, size)),
                                     transforms.ToTensor()])
 
 batch_size = 6
-trainset = PhC(train=True, transform=train_transform)
-train_loader = DataLoader(trainset, batch_size=batch_size, shuffle=True,
-                          num_workers=3)
-testset = PhC(train=False, transform=test_transform)
-test_loader = DataLoader(testset, batch_size=batch_size, shuffle=False,
-                          num_workers=3)
+labeledset = DRIVE(train=True, transform=train_transform)
+unlabeledset = DRIVE(train=False, transform=test_transform)
+
+train_subset_l, val_subset_l, test_subset_l = torch.utils.data.random_split(labeledset, [0.7, 0.1, 0.2], generator=torch.Generator().manual_seed(seed))
+train_subset, val_subset, test_subset = torch.utils.data.random_split(unlabeledset, [0.7, 0.1, 0.2], generator=torch.Generator().manual_seed(seed))
+
+# X_train_l, X_temp_l, y_train_l, y_temp_l = train_test_split(X_labeled, y_labeled, test_size=0.3, random_state=seed)
+# X_val_l, X_test_l, y_val_l, y_test_l = train_test_split(X_labeled, y_labeled, test_size=2/3, random_state=seed)
+
+# X_train, X_temp, y_train, y_temp = train_test_split(X_unlabeled, y_unlabeled, test_size=0.3, random_state=seed)
+# X_val, X_test, y_val, y_test = train_test_split(X_unlabeled, y_unlabeled, test_size=2/3, random_state=seed)
+
+train_set = train_subset_l.__add__(train_subset)
+val_set = val_subset_l.__add__(val_subset)
+test_set = test_subset_l.__add__(test_subset)
 
 
-print(f"Loaded {len(trainset)} training images")
-print(f"Loaded {len(testset)} test images")
+train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=True, num_workers=3)
+val_loader = DataLoader(val_set, batch_size=batch_size, shuffle=True, num_workers=3)
+test_loader = DataLoader(test_set, batch_size=batch_size, shuffle=False, num_workers=3)
+
+# dataset = PH2(transform=train_transform)
+# data_loadet = DataLoader(dataset, batch_size=batch_size, num_workers=3)
+
+print(f"Loaded {len(train_set)} training images")
+print(f"Loaded {len(val_loader)} validation images")
+print(f"Loaded {len(test_loader)} test images")
 
 # Training setup
 device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
