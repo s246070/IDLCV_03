@@ -17,7 +17,7 @@ seed = 42
 size = 128
 batch_size = 3
 learning_rate = 0.001
-epochs = 700
+epochs = 400
 dataset = "DRIVE"
 
 transform = transforms.Compose([transforms.Resize((size, size)),
