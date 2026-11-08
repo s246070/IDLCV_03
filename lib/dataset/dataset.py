@@ -2,9 +2,6 @@ import torch
 import os
 import glob
 from PIL import Image
-import torchvision.transforms as transforms
-
-# DATA_PATH = '/dtu/datasets1/02516/phc_data'
 
 class DRIVE(torch.utils.data.Dataset):
     def __init__(self, train, transform):
@@ -59,16 +56,3 @@ class PH2(torch.utils.data.Dataset):
         Y = self.transform(label)
         X = self.transform(image)
         return X, Y
-
-if __name__ == "__main__":
-    size = 128
-    train_transform = transforms.Compose([transforms.Resize((size, size)),
-                                    transforms.ToTensor()])
-    trainset = DRIVE(train=True, transform=train_transform)
-    print("Number of samples:", len(trainset))            # >0 ?
-    print("First 3 image paths:", trainset.image_paths[:3])
-    print("First 3 label paths:", trainset.label_paths[:3])
-
-    X, Y = trainset[0]
-    print("Image tensor:", X.shape, X.dtype, X.min().item(), X.max().item())
-    print("Label tensor:", Y.shape, Y.dtype, Y.unique())

@@ -1,12 +1,15 @@
 from torch import nn
+import torch.nn.functional as F
 import torch
 
 class BCELoss(nn.Module):
-    def __init__(self):
+    def __init__(self, pos_weight=1.0):
         super().__init__()
+        self.pos_weight = pos_weight
 
     def forward(self, y_pred, y_true):
-        loss = torch.mean(y_pred - y_true*y_pred + torch.log(1 + torch.exp(-y_pred)))
+        w = self.pos_weight
+        loss = torch.mean((1 - y_true) * y_pred + (1 + (w - 1) * y_true) * F.softplus(-y_pred))
         return loss
 
 class DiceLoss(nn.Module):
@@ -25,7 +28,9 @@ class FocalLoss(nn.Module):
         super().__init__()
 
     def forward(self, y_pred, y_true, gamma =2.0):
-        loss = -torch.mean((1-torch.sigmoid(y_pred))**gamma * y_true * torch.log(torch.sigmoid(y_pred)) + (1-y_true) * torch.log(1-torch.sigmoid(y_pred)))
+        log_p = F.logsigmoid(y_pred)       # log(sigmoid(y_pred))
+        log_1mp = F.logsigmoid(-y_pred)    # log(1 - sigmoid(y_pred))
+        loss = -torch.mean((1 - torch.sigmoid(y_pred))**gamma * y_true * log_p + (1 - y_true) * log_1mp)
         return loss
 
 class BCELoss_TotalVariation(nn.Module):
