@@ -18,6 +18,7 @@ from lib.model.EncDecModel import EncDec
 from lib.model.UNetModel import UNet
 from IDLCV_03.lib.dataset.dataset import DRIVE, PH2
 from sklearn.model_selection import train_test_split
+from lib.weak_annotation import Weak_Annotation
 
 seed = 42
 # Dataset
@@ -49,6 +50,7 @@ train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=True, num_wo
 val_loader = DataLoader(val_set, batch_size=batch_size, shuffle=True, num_workers=3)
 test_loader = DataLoader(test_set, batch_size=batch_size, shuffle=False, num_workers=3)
 
+
 # dataset = PH2(transform=train_transform)
 # data_loadet = DataLoader(dataset, batch_size=batch_size, num_workers=3)
 
@@ -71,16 +73,18 @@ epochs = 20
 
 # Training loop
 X_test, Y_test = next(iter(test_loader))
+Weak_Annotation = Weak_Annotation(Y_test)
+
 model.train()  # train mode
 for epoch in range(epochs):
     tic = time()
     print(f'* Epoch {epoch+1}/{epochs}')
 
     avg_loss = 0
-    for X_batch, y_true in train_loader:
+    for idx, (X_batch, y_true) in enumerate(train_loader):
         X_batch = X_batch.to(device)
         y_true = y_true.to(device)
-
+        y_annotated = Weak_Annotation.annotate(idx, num_positive_samples=10, num_negative_samples=10)
         # set parameter gradients to zero
         opt.zero_grad()
 
