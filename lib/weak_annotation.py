@@ -1,4 +1,3 @@
-
 from scipy.ndimage import distance_transform_edt
 import numpy as np
 import torch

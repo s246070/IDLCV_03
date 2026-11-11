@@ -12,6 +12,20 @@ class BCELoss(nn.Module):
         loss = torch.mean((1 - y_true) * y_pred + (1 + (w - 1) * y_true) * F.softplus(-y_pred))
         return loss
 
+class WeakBCELoss(nn.Module):
+    def __init__(self, pos_weight=1.0):
+        super().__init__()
+        self.pos_weight = pos_weight
+
+    def forward(self, y_pred, y_weak):
+        labeled = (y_weak != 0).float()   # where are the clicks
+        y_true = (y_weak == 1).float()    # where are the foreground clicks
+
+        w = self.pos_weight
+        per_pixel = (1 - y_true) * y_pred + (1 + (w - 1) * y_true) * F.softplus(-y_pred)
+
+        return (per_pixel * labeled).sum() / labeled.sum()
+
 class DiceLoss(nn.Module):
     def __init__(self):
         super().__init__()
