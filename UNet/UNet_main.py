@@ -50,7 +50,7 @@ if loss_function == "cross entropy":
 elif loss_function == "focal loss":
     loss_fn = FocalLoss()
 else: 
-    loss_fn = nn.BCEWithLogitsLoss()
+    loss_fn = BCELoss(0.7)
 
 metrics = SegmentationMetrics(threshold=0.5, from_logits=True)
 
