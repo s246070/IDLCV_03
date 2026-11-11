@@ -17,8 +17,8 @@ seed = 42
 size = 128
 batch_size = 3
 learning_rate = 0.001
-epochs = 400
-dataset = "DRIVE"
+epochs = 30
+dataset = "PH2"
 
 transform = transforms.Compose([transforms.Resize((size, size)),
                                 transforms.ToTensor()])
@@ -26,7 +26,7 @@ dataset_ph2 = PH2(transform=transform)
 dataset_drive = DRIVE(train=True, transform=transform)
 
 train_set, val_set, test_set = torch.utils.data.random_split(
-    dataset_drive, [0.7, 0.1, 0.2], generator=torch.Generator().manual_seed(seed))
+    dataset_ph2, [0.7, 0.1, 0.2], generator=torch.Generator().manual_seed(seed))
 
 train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=True, num_workers=3)
 val_loader = DataLoader(val_set, batch_size=batch_size, shuffle=False, num_workers=3)
@@ -39,7 +39,7 @@ print(f"Loaded {len(test_set)} test images")
 device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 model = EncDec().to(device)
 opt = optim.Adam(model.parameters(), learning_rate)
-loss_fn = FocalLoss()
+loss_fn = BCELoss()
 metrics = SegmentationMetrics(threshold=0.5, from_logits=True)
 
 results_dir = "IDLCV_03/EncDec/results"
@@ -92,9 +92,15 @@ with open(f"{results_dir}/history_{dataset}.csv", "w", newline="") as f:
     w.writerows(history)
 
 model.load_state_dict(torch.load(f"{results_dir}/best_model.pth", map_location=device))
-_, test_m = evaluate(test_loader)
-with open(f"{results_dir}/test_metrics_{dataset}.json", "w") as f:
-    json.dump(test_m, f, indent=2)
+splits = {"train": train_loader, "val": val_loader, "test": test_loader}
+all_metrics = {}
+for name, loader in splits.items():
+    _, m = evaluate(loader)
+    all_metrics[name] = m
+    print(f"{name:5s}: " + " | ".join(f"{k}={v:.4f}" for k, v in m.items()))
+
+with open(f"{results_dir}/final_metrics_{dataset}_.json", "w") as f:
+    json.dump(all_metrics, f, indent=2)
 
 
 @torch.no_grad()
