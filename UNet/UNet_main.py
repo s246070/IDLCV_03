@@ -1,7 +1,7 @@
 import os, json, csv
 import torch
 import torch.nn as nn
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, TensorDataset
 import torchvision.transforms as transforms
 import torch.optim as optim
 from time import time
@@ -9,6 +9,7 @@ from lib.model.UNetModel import UNet
 from lib.losses import *
 from lib.dataset.dataset import PH2, DRIVE
 from lib.metrics import SegmentationMetrics
+from lib.weak_annotation import *
 import matplotlib
 matplotlib.use("Agg")       
 import matplotlib.pyplot as plt
@@ -17,9 +18,11 @@ seed = 42
 size = 256
 batch_size = 3
 learning_rate = 0.001
-epochs = 400
-dataset = "DRIVE"
-loss_function = "cross entropy pos"
+epochs = 30
+dataset = "PH2"
+loss_function = "weak"
+num_positive_samples = 40
+num_negative_samples = 10
 
 transform = transforms.Compose([transforms.Resize((size, size)),
                                 transforms.ToTensor()])
@@ -33,13 +36,69 @@ else:
 train_set, val_set, test_set = torch.utils.data.random_split(
     dataset_loaded, [0.7, 0.1, 0.2], generator=torch.Generator().manual_seed(seed))
 
-train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=True, num_workers=3)
+X_all = torch.stack([train_set[i][0] for i in range(len(train_set))])
+Y_all = torch.stack([train_set[i][1] for i in range(len(train_set))])
+
+annotator = Weak_Annotation(Y_all, seed=seed)
+weak_all = torch.stack([
+    annotator.annotate(i, num_positive_samples=num_positive_samples, num_negative_samples=num_negative_samples)
+    for i in range(len(Y_all))
+]).unsqueeze(1).float()
+
+n_pos = (weak_all == 1).sum().item()
+n_neg = (weak_all == -1).sum().item()
+
+train_eval_loader = DataLoader(TensorDataset(X_all, Y_all), batch_size=batch_size, shuffle=False)
+train_loader = DataLoader(TensorDataset(X_all, weak_all),
+                          batch_size=batch_size, shuffle=True, num_workers=3)
+
+
+# train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=True, num_workers=3)
 val_loader = DataLoader(val_set, batch_size=batch_size, shuffle=False, num_workers=3)
 test_loader = DataLoader(test_set, batch_size=batch_size, shuffle=False, num_workers=3)
 
 print(f"Loaded {len(train_set)} training images")
 print(f"Loaded {len(val_set)} validation images")
 print(f"Loaded {len(test_set)} test images")
+
+vis_n = 4
+vis_X = X_all[:vis_n]
+vis_Y = Y_all[:vis_n]
+vis_W = weak_all[:vis_n]
+
+@torch.no_grad()
+def plot_train_epoch(epoch, path):
+    model.eval()
+    prob = torch.sigmoid(model(vis_X.to(device))).cpu()
+    model.train()
+
+    fig, ax = plt.subplots(vis_n, 4, figsize=(11, 2.7 * vis_n), squeeze=False)
+    for i in range(vis_n):
+        w = vis_W[i, 0]
+        pos = (w == 1).nonzero() 
+        neg = (w == -1).nonzero()
+
+        ax[i, 0].imshow(vis_X[i].permute(1, 2, 0))
+        ax[i, 0].set_title("Image")
+
+        ax[i, 1].imshow(vis_Y[i, 0], cmap="gray")
+        ax[i, 1].scatter(pos[:, 1], pos[:, 0], c="lime", s=25, edgecolors="k", linewidths=0.5)
+        ax[i, 1].scatter(neg[:, 1], neg[:, 0], c="red", s=25, edgecolors="k", linewidths=0.5)
+        ax[i, 1].set_title("GT + weak points")
+
+        ax[i, 2].imshow(prob[i, 0], cmap="viridis", vmin=0, vmax=1)
+        ax[i, 2].set_title("Predicted prob.")
+
+        ax[i, 3].imshow(prob[i, 0] >= 0.5, cmap="gray")
+        ax[i, 3].set_title("Prediction (>=0.5)")
+
+        for a in ax[i]:
+            a.axis("off")
+
+    fig.suptitle(f"Epoch {epoch}")
+    plt.tight_layout()
+    plt.savefig(path, dpi=110)
+    plt.close(fig)
 
 device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 model = UNet().to(device)
@@ -49,6 +108,9 @@ if loss_function == "cross entropy":
     loss_fn = BCELoss()
 elif loss_function == "focal loss":
     loss_fn = FocalLoss()
+elif loss_function == "weak":
+    val_loss_fn = BCELoss()
+    loss_fn = WeakBCELoss(pos_weight=n_neg / n_pos)
 else: 
     loss_fn = BCELoss(0.7)
 
@@ -64,7 +126,7 @@ def evaluate(loader):
     for X, y in loader:
         X, y = X.to(device), y.to(device)
         y_pred = model(X)
-        total_loss += loss_fn(y_pred, y).item() / len(loader)
+        total_loss += val_loss_fn(y_pred, y).item() / len(loader)
         metrics.update(y_pred, y)
     return total_loss, metrics.compute()
 
@@ -88,6 +150,8 @@ for epoch in range(epochs):
         train_loss += loss.item() / len(train_loader)
 
     val_loss, val_m = evaluate(val_loader)
+    if (epoch + 1) % 10 == 0 or epoch == 0:
+        plot_train_epoch(epoch + 1, f"{results_dir}/train_vis_{dataset}_epoch{epoch+1:03d}_{num_positive_samples}.png")
 
     history.append({"epoch": epoch + 1, "train_loss": train_loss, "val_loss": val_loss,
                     **{f"val_{k}": v for k, v in val_m.items()}})
@@ -98,20 +162,20 @@ for epoch in range(epochs):
         best_dice = val_m["Dice"]
         torch.save(model.state_dict(), f"{results_dir}/best_model.pth")
 
-with open(f"{results_dir}/history_{dataset}_{loss_function}.csv", "w", newline="") as f:
+with open(f"{results_dir}/history_{dataset}_{loss_function}_{num_positive_samples}.csv", "w", newline="") as f:
     w = csv.DictWriter(f, fieldnames=history[0].keys())
     w.writeheader()
     w.writerows(history)
 
 model.load_state_dict(torch.load(f"{results_dir}/best_model.pth", map_location=device))
-splits = {"train": train_loader, "val": val_loader, "test": test_loader}
+splits = {"train": train_eval_loader, "val": val_loader, "test": test_loader}
 all_metrics = {}
 for name, loader in splits.items():
     _, m = evaluate(loader)
     all_metrics[name] = m
     print(f"{name:5s}: " + " | ".join(f"{k}={v:.4f}" for k, v in m.items()))
 
-with open(f"{results_dir}/final_metrics_{dataset}_{loss_function}.json", "w") as f:
+with open(f"{results_dir}/final_metrics_{dataset}_{loss_function}_{num_positive_samples}.json", "w") as f:
     json.dump(all_metrics, f, indent=2)
 
 
