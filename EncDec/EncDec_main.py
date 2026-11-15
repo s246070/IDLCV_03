@@ -34,7 +34,7 @@ Y_all = torch.stack([train_set[i][1] for i in range(len(train_set))])
 
 annotator = Weak_Annotation(Y_all, seed=seed)
 weak_all = torch.stack([
-    annotator.annotate(i, num_positive_samples=25, num_negative_samples=25, sampling="uniform")
+    annotator.annotate(i, num_positive_samples=40, num_negative_samples=10, sampling="uniform")
     for i in range(len(Y_all))
 ]).unsqueeze(1).float()
 
@@ -157,7 +157,7 @@ for name, loader in splits.items():
     all_metrics[name] = m
     print(f"{name:5s}: " + " | ".join(f"{k}={v:.4f}" for k, v in m.items()))
 
-with open(f"{results_dir}/final_metrics_{dataset}_rand.json", "w") as f:
+with open(f"{results_dir}/final_metrics_{dataset}_rand_40_10.json", "w") as f:
     json.dump(all_metrics, f, indent=2)
 
 
@@ -197,4 +197,4 @@ def save_predictions(loader, path, n=8):
     plt.savefig(path, dpi=120)
     plt.close(fig)
 
-save_predictions(test_loader, f"{results_dir}/test_predictions_{dataset}_rand.png", n=8)
+save_predictions(test_loader, f"{results_dir}/test_predictions_{dataset}_rand_40_10.png", n=8)

@@ -21,8 +21,8 @@ learning_rate = 0.001
 epochs = 30
 dataset = "PH2"
 loss_function = "weak"
-num_positive_samples = 25
-num_negative_samples = 25
+num_positive_samples = 50
+num_negative_samples = 30
 
 transform = transforms.Compose([transforms.Resize((size, size)),
                                 transforms.ToTensor()])
