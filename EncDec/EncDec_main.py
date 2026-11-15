@@ -11,7 +11,7 @@ from IDLCV_03.lib.weak_annotation import *
 from IDLCV_03.lib.dataset.dataset import PH2, DRIVE
 from IDLCV_03.lib.metrics import SegmentationMetrics
 import matplotlib
-matplotlib.use("Agg")       
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 seed = 42
@@ -34,7 +34,7 @@ Y_all = torch.stack([train_set[i][1] for i in range(len(train_set))])
 
 annotator = Weak_Annotation(Y_all, seed=seed)
 weak_all = torch.stack([
-    annotator.annotate(i, num_positive_samples=50, num_negative_samples=30)
+    annotator.annotate(i, num_positive_samples=25, num_negative_samples=25, sampling="uniform")
     for i in range(len(Y_all))
 ]).unsqueeze(1).float()
 
@@ -133,7 +133,7 @@ for epoch in range(epochs):
 
     val_loss, val_m = evaluate(val_loader)
     if (epoch + 1) % 10 == 0 or epoch == 0:
-        plot_train_epoch(epoch + 1, f"{results_dir}/train_vis_{dataset}_epoch{epoch+1:03d}_50.png")
+        plot_train_epoch(epoch + 1, f"{results_dir}/train_vis_{dataset}_epoch{epoch+1:03d}_rand.png")
 
     history.append({"epoch": epoch + 1, "train_loss": train_loss, "val_loss": val_loss,
                     **{f"val_{k}": v for k, v in val_m.items()}})
@@ -157,7 +157,7 @@ for name, loader in splits.items():
     all_metrics[name] = m
     print(f"{name:5s}: " + " | ".join(f"{k}={v:.4f}" for k, v in m.items()))
 
-with open(f"{results_dir}/final_metrics_{dataset}_.json", "w") as f:
+with open(f"{results_dir}/final_metrics_{dataset}_rand.json", "w") as f:
     json.dump(all_metrics, f, indent=2)
 
 
@@ -197,4 +197,4 @@ def save_predictions(loader, path, n=8):
     plt.savefig(path, dpi=120)
     plt.close(fig)
 
-save_predictions(test_loader, f"{results_dir}/test_predictions_{dataset}.png", n=8)
+save_predictions(test_loader, f"{results_dir}/test_predictions_{dataset}_rand.png", n=8)

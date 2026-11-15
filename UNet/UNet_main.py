@@ -5,11 +5,11 @@ from torch.utils.data import DataLoader, TensorDataset
 import torchvision.transforms as transforms
 import torch.optim as optim
 from time import time
-from lib.model.UNetModel import UNet
-from lib.losses import *
-from lib.dataset.dataset import PH2, DRIVE
-from lib.metrics import SegmentationMetrics
-from lib.weak_annotation import *
+from IDLCV_03.lib.model.UNetModel import UNet
+from IDLCV_03.lib.losses import *
+from IDLCV_03.lib.dataset.dataset import PH2, DRIVE
+from IDLCV_03.lib.metrics import SegmentationMetrics
+from IDLCV_03.lib.weak_annotation import *
 import matplotlib
 matplotlib.use("Agg")       
 import matplotlib.pyplot as plt
@@ -21,8 +21,8 @@ learning_rate = 0.001
 epochs = 30
 dataset = "PH2"
 loss_function = "weak"
-num_positive_samples = 40
-num_negative_samples = 10
+num_positive_samples = 25
+num_negative_samples = 25
 
 transform = transforms.Compose([transforms.Resize((size, size)),
                                 transforms.ToTensor()])
@@ -41,7 +41,7 @@ Y_all = torch.stack([train_set[i][1] for i in range(len(train_set))])
 
 annotator = Weak_Annotation(Y_all, seed=seed)
 weak_all = torch.stack([
-    annotator.annotate(i, num_positive_samples=num_positive_samples, num_negative_samples=num_negative_samples)
+    annotator.annotate(i, num_positive_samples=num_positive_samples, num_negative_samples=num_negative_samples, sampling="uniform")
     for i in range(len(Y_all))
 ]).unsqueeze(1).float()
 
@@ -116,7 +116,7 @@ else:
 
 metrics = SegmentationMetrics(threshold=0.5, from_logits=True)
 
-results_dir = "UNet/results"
+results_dir = "IDLCV_03/UNet/results"
 
 @torch.no_grad()
 def evaluate(loader):
@@ -151,7 +151,7 @@ for epoch in range(epochs):
 
     val_loss, val_m = evaluate(val_loader)
     if (epoch + 1) % 10 == 0 or epoch == 0:
-        plot_train_epoch(epoch + 1, f"{results_dir}/train_vis_{dataset}_epoch{epoch+1:03d}_{num_positive_samples}.png")
+        plot_train_epoch(epoch + 1, f"{results_dir}/train_vis_{dataset}_epoch{epoch+1:03d}_{num_positive_samples}_rand.png")
 
     history.append({"epoch": epoch + 1, "train_loss": train_loss, "val_loss": val_loss,
                     **{f"val_{k}": v for k, v in val_m.items()}})
@@ -175,7 +175,7 @@ for name, loader in splits.items():
     all_metrics[name] = m
     print(f"{name:5s}: " + " | ".join(f"{k}={v:.4f}" for k, v in m.items()))
 
-with open(f"{results_dir}/final_metrics_{dataset}_{loss_function}_{num_positive_samples}.json", "w") as f:
+with open(f"{results_dir}/final_metrics_{dataset}_{loss_function}_{num_positive_samples}_rand.json", "w") as f:
     json.dump(all_metrics, f, indent=2)
 
 
@@ -216,4 +216,4 @@ def save_predictions(loader, path, n=8):
     plt.close(fig)
 
 
-save_predictions(test_loader, f"{results_dir}/test_predictions_{dataset}_{loss_function}.png", n=8)
+save_predictions(test_loader, f"{results_dir}/test_predictions_{dataset}_{loss_function}_rand.png", n=8)

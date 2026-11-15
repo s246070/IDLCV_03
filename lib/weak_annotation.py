@@ -10,51 +10,37 @@ class Weak_Annotation():
         self.seed = seed
         self.device = device
 
-    def annotate(self, idx, num_positive_samples=10, num_negative_samples=10):
+    def annotate(self, idx, num_positive_samples=10, num_negative_samples=10, sampling="distance"):
 
-        # Reproducible random sampling for each image
+        if sampling not in ("distance", "uniform"):
+            raise ValueError(f"Unknown sampling mode: {sampling}")
+
         generator = torch.Generator().manual_seed(self.seed + idx)
 
-        mask = (self.vessel_masks[idx].detach().to(self.device).numpy().squeeze() > 0)
-        Y_dist = distance_transform_edt(mask)
-        positive_cand = mask  # Keep all vessel pixels
+        mask = (self.vessel_masks[idx].detach().cpu().numpy().squeeze() > 0)
 
-        # convert positive_cand to a tensor with 0 and 1 values
-        positive_cand_tensor = torch.from_numpy(positive_cand.astype(int))
+        positive_coords = torch.nonzero(torch.from_numpy(mask))
+        n_pos = min(num_positive_samples, positive_coords.size(0))
 
-        # pick 10 random positive candidates, weighted by distance
-        positive_coords = torch.nonzero(positive_cand_tensor)
-
-        if positive_coords.size(0) > 0:
-            weights = torch.from_numpy(Y_dist[positive_cand]).float() ** 0.5
-            probs = weights / weights.sum()
-
-            random_indices = torch.multinomial(
-                probs,
-                min(num_positive_samples, positive_coords.size(0)),
-                replacement=False,
-                generator=generator
-            )
+        if n_pos > 0:
+            if sampling == "distance":
+                Y_dist = distance_transform_edt(mask)
+                weights = torch.from_numpy(Y_dist[mask]).float() ** 0.5
+                probs = weights / weights.sum()
+                pos_idx = torch.multinomial(probs, n_pos, replacement=False, generator=generator)
+            else: 
+                pos_idx = torch.randperm(positive_coords.size(0), generator=generator)[:n_pos]
+            pos_picked = positive_coords[pos_idx]
         else:
-            random_indices = torch.empty(0, dtype=torch.long)
+            pos_picked = torch.empty((0, 2), dtype=torch.long)
 
-        # pick random negative candidates
-        negative_cand = ~mask
-        negative_cand_tensor = torch.from_numpy(negative_cand.astype(int))
-        negative_coords = torch.nonzero(negative_cand_tensor)
+        negative_coords = torch.nonzero(torch.from_numpy(~mask))
+        neg_idx = torch.randperm(negative_coords.size(0), generator=generator)[:num_negative_samples]
+        neg_picked = negative_coords[neg_idx]
 
-        random_negative_indices = torch.randperm(negative_coords.size(0),generator=generator)[:num_negative_samples]
-
-        # put positive and negative samples in a single matrix
         candidates_matrix = torch.zeros(mask.shape, dtype=torch.int)
-
-        for i in random_indices:
-            coord = positive_coords[i]
-            candidates_matrix[coord[0], coord[1]] = 1
-
-        for i in random_negative_indices:
-            coord = negative_coords[i]
-            candidates_matrix[coord[0], coord[1]] = -1
+        candidates_matrix[pos_picked[:, 0], pos_picked[:, 1]] = 1
+        candidates_matrix[neg_picked[:, 0], neg_picked[:, 1]] = -1
 
         return candidates_matrix.to(self.device)
 
